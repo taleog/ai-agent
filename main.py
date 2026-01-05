@@ -3,7 +3,7 @@ import argparse
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
-from call_function import available_functions
+from call_function import available_functions, call_function
 from prompts import system_prompt
 
 def main():
@@ -53,11 +53,23 @@ def generate_content(client, prompt, messages, verbose):
 
     function_calls = response.function_calls
     if function_calls:
-        for function_call in function_calls:
-            call_args = dict(function_call.args or {})
-            if function_call.name == "get_files_info" and "directory" not in call_args:
-                call_args["directory"] = "."
-            print(f"Calling function: {function_call.name}({call_args})")
+        function_results = []
+        for function_call_item in function_calls:
+            function_call_result = call_function(function_call_item, verbose=verbose)
+            if not function_call_result.parts:
+                raise RuntimeError("Function call result missing parts")
+
+            function_response = function_call_result.parts[0].function_response
+            if function_response is None:
+                raise RuntimeError("Function response missing")
+
+            if function_response.response is None:
+                raise RuntimeError("Function response missing data")
+
+            function_results.append(function_call_result.parts[0])
+
+            if verbose:
+                print(f"-> {function_response.response}")
     else:
         print(response.text)
     
