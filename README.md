@@ -9,6 +9,7 @@ This repo was made by following along the course from boot.dev, and this README 
 *   **Gemini API Integration**: Utilizes the `gemini-2.5-flash` model for intelligent conversational abilities.
 *   **Function Calling**: The agent can dynamically call predefined Python functions based on user prompts, enabling it to perform actions like listing files, reading content, executing scripts, and writing files.
 *   **Multi-turn Conversations**: Supports ongoing interactions, maintaining context across multiple exchanges.
+*   **Memory Management**: Loads, saves, and updates running memory (`.agent_memory.txt`) to retain context across sessions.
 *   **Verbose Output**: An optional verbose mode provides detailed insights into the agent's thought process, including token usage and function call details.
 *   **Extensible Toolset**: Easily add new functions to `call_function.py` to expand the agent's capabilities.
 
@@ -41,6 +42,39 @@ Run the agent from the command line with a user prompt.
 ```bash
 python main.py "Your prompt here"
 ```
+
+### Interaction Modes
+
+*   **Direct Prompt Execution**:
+    ```bash
+    python main.py "Your prompt here"
+    ```
+*   **Interactive Chat**:
+    ```bash
+    python main.py --chat
+    ```
+
+### Output Control
+
+*   **Verbose Output**: Use the `--verbose` flag for detailed insights into the agent's thought process.
+    ```bash
+    python main.py "Your prompt here" --verbose
+    ```
+
+### Memory Options
+
+*   **No Memory**: Disable memory loading and saving for a single interaction.
+    ```bash
+    python main.py "Your prompt here" --no-memory
+    ```
+*   **Reset Memory**: Clear the current memory before starting a new interaction.
+    ```bash
+    python main.py "Your prompt here" --reset-memory
+    ```
+*   **Custom Memory File**: Specify a different file for memory storage.
+    ```bash
+    python main.py "Your prompt here" --memory-file /path/to/my_memory.txt
+    ```
 
 ### Examples:
 
