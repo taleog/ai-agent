@@ -1,15 +1,19 @@
 # AI Agent CLI
 
-A polished, tool-using CLI agent powered by Gemini. It plans, calls tools, and iterates until it has a final answer, with a premium terminal UI and persistent memory to keep context across sessions.
+A polished Gemini-powered agent that plans tool calls, executes them, and iterates until it has a final answer. Built for clean, premium terminal output with a persistent memory layer.
+
+## Demo
+
+![AI Agent Demo](docs/demo.gif)
 
 ## Highlights
 
-- Rich terminal UI with panels, tables, syntax highlighting, and spinners.
-- Multi-turn tool loop (plan → call tools → observe → answer).
-- Persistent memory (`.agent_memory.txt`) to continue conversations over time.
-- Built-in toolset for file IO, Python execution, and directory management.
-- Verbose mode for debugging tokens, tool calls, and tool responses.
-- Safety: tool calls are scoped to a working directory you control.
+- Multi-step tool loop (plan → call tools → observe → answer).
+- Rich terminal UI (panels, tables, syntax highlighting, spinners).
+- Persistent memory (`.agent_memory.txt`) for continuity across sessions.
+- Extensible toolset: file IO, Python execution, directory ops.
+- Verbose mode for debugging tokens and tool calls.
+- Scoped execution for safety.
 
 ## Quickstart
 
@@ -18,36 +22,36 @@ A polished, tool-using CLI agent powered by Gemini. It plans, calls tools, and i
 uv sync
 ```
 
-2) Add your API key:
+2) Set your API key:
 ```bash
 echo 'GEMINI_API_KEY=your_key_here' > .env
 ```
 
-3) Run the agent:
+3) Run:
 ```bash
 uv run main.py "read main.py"
 ```
 
-Or start a chat session:
+Start a chat session:
 ```bash
 uv run main.py --chat
 ```
 
-## Usage
+## CLI Usage
 
 ```bash
 uv run main.py "list files in the root"
 uv run main.py --chat
-uv run main.py "read main.py" --verbose
+uv run main.py "read prompts.py" --verbose
 uv run main.py "..." --no-memory
 uv run main.py --reset-memory
 uv run main.py --memory-file /tmp/agent_memory.txt
 ```
 
-### Tools Available to the Agent
+## Tools Available
 
 - `get_files_info(directory)` — list files and sizes.
-- `get_file_content(file_path)` — read file contents (auto-truncated for safety).
+- `get_file_content(file_path)` — read file contents (auto-truncated).
 - `write_file(file_path, content)` — write/overwrite a file.
 - `run_python_file(file_path, args)` — execute a Python file with optional args.
 - `mkdir(directory_path)` — create a directory.
@@ -55,19 +59,28 @@ uv run main.py --memory-file /tmp/agent_memory.txt
 
 ## How It Works
 
-The agent runs a loop:
-1) The model decides what tool(s) to call.
-2) The program executes those tools.
-3) Tool results are fed back into the conversation.
-4) The model returns a final response once it has enough info.
+The agent loops through:
+1) Model decides which tool(s) to call.
+2) The program executes tools and collects results.
+3) Results are fed back into the conversation.
+4) The model returns a final response when ready.
 
-Memory is summarized after each completed turn and injected into the system prompt on the next run so the agent can pick up where it left off.
+After each completed turn, a short memory summary is stored and injected into the next session’s system prompt.
 
 ## Safety & Configuration
 
-Tool calls are sandboxed to a working directory defined in `call_function.py` (`working_directory` is set to `.` by default). Change this if you want to restrict the agent to a subfolder (for example, `./calculator`).
+Tool calls are scoped to a working directory defined in `call_function.py` (`working_directory` is set to `.` by default). Change this if you want to restrict access (for example, `./calculator`).
 
-Be cautious when running the agent with write or execute permissions, as it can modify or run code on your machine.
+Be cautious when running the agent with write or execute permissions; it can modify or run code on your machine.
+
+## Recording a Demo
+
+```bash
+brew install vhs
+./scripts/record-demo.sh
+```
+
+Edit `docs/demo.tape` to change the flow, theme, or prompts.
 
 ---
 

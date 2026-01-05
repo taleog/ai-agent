@@ -18,6 +18,7 @@ from rich.theme import Theme
 DEFAULT_MEMORY_FILE = ".agent_memory.txt"
 MAX_MEMORY_CHARS = 2000
 MAX_DISPLAY_CHARS = 4000
+MAX_TABLE_ROWS = 12
 SUMMARY_PROMPT = """
 You are updating a running memory for a coding agent.
 Summarize only the durable, useful context: user goals, preferences, important files, and notable actions.
@@ -144,8 +145,16 @@ def render_files_info(console, output):
     table.add_column("Name", overflow="fold")
     table.add_column("Size", justify="right")
     table.add_column("Type")
-    for name, size, is_dir in rows:
+    display_rows = rows
+    hidden_count = 0
+    if len(rows) > MAX_TABLE_ROWS:
+        display_rows = rows[:MAX_TABLE_ROWS]
+        hidden_count = len(rows) - MAX_TABLE_ROWS
+
+    for name, size, is_dir in display_rows:
         table.add_row(name, f"{size} B", "dir" if is_dir else "file")
+    if hidden_count:
+        table.add_row(f"...and {hidden_count} more", "", "")
     console.print(table)
 
 
