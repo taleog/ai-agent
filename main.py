@@ -3,6 +3,7 @@ import argparse
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
+from call_function import available_functions
 from prompts import system_prompt
 
 def main():
@@ -28,7 +29,10 @@ def generate_content(client, prompt, messages, verbose):
     response = client.models.generate_content(
         model='gemini-2.5-flash',
         contents=messages,
-        config=types.GenerateContentConfig(system_instruction=system_prompt),
+        config=types.GenerateContentConfig(
+            system_instruction=system_prompt,
+            tools=[available_functions],
+        ),
     )
 
     usage = response.usage_metadata
@@ -46,8 +50,14 @@ def generate_content(client, prompt, messages, verbose):
         print(f"User prompt: {prompt}")
         print(f"Prompt tokens: {prompt_tokens}")
         print(f"Response tokens: {response_tokens}")
-        print("Response:")
-        print(response.text)
+
+    function_calls = response.function_calls
+    if function_calls:
+        for function_call in function_calls:
+            call_args = dict(function_call.args or {})
+            if function_call.name == "get_files_info" and "directory" not in call_args:
+                call_args["directory"] = "."
+            print(f"Calling function: {function_call.name}({call_args})")
     else:
         print(response.text)
     
