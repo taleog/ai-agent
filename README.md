@@ -1,102 +1,74 @@
-# AI Agent with Gemini and Function Calling
+# AI Agent CLI
 
-This project implements an AI agent capable of interacting with users, understanding their prompts, and executing various tools (functions) to fulfill requests. It leverages the Google Gemini API, specifically `gemini-2.5-flash`, to enable multi-turn conversations and dynamic tool use.
+A polished, tool-using CLI agent powered by Gemini. It plans, calls tools, and iterates until it has a final answer, with a premium terminal UI and persistent memory to keep context across sessions.
 
-This repo was made by following along the course from boot.dev, and this README was written with the tool itself to test its capabilities.
+## Highlights
 
-## Features
+- Rich terminal UI with panels, tables, syntax highlighting, and spinners.
+- Multi-turn tool loop (plan → call tools → observe → answer).
+- Persistent memory (`.agent_memory.txt`) to continue conversations over time.
+- Built-in toolset for file IO, Python execution, and directory management.
+- Verbose mode for debugging tokens, tool calls, and tool responses.
+- Safety: tool calls are scoped to a working directory you control.
 
-*   **Gemini API Integration**: Utilizes the `gemini-2.5-flash` model for intelligent conversational abilities.
-*   **Function Calling**: The agent can dynamically call predefined Python functions based on user prompts, enabling it to perform actions like listing files, reading content, executing scripts, and writing files.
-*   **Multi-turn Conversations**: Supports ongoing interactions, maintaining context across multiple exchanges.
-*   **Memory Management**: Loads, saves, and updates running memory (`.agent_memory.txt`) to retain context across sessions.
-*   **Verbose Output**: An optional verbose mode provides detailed insights into the agent's thought process, including token usage and function call details.
-*   **Extensible Toolset**: Easily add new functions to `call_function.py` to expand the agent's capabilities.
+## Quickstart
 
-## Setup
+1) Install dependencies:
+```bash
+uv sync
+```
 
-To get this project up and running, follow these steps:
+2) Add your API key:
+```bash
+echo 'GEMINI_API_KEY=your_key_here' > .env
+```
 
-1.  **Clone the repository**:
-    ```bash
-    git clone <repository_url>
-    cd <repository_directory>
-    ```
+3) Run the agent:
+```bash
+uv run main.py "read main.py"
+```
 
-2.  **Install dependencies**:
-    We recommend using `uv` for dependency management.
-    ```bash
-    uv pip install .
-    ```
-
-3.  **Set up your Gemini API Key**:
-    Obtain a Gemini API key from the Google AI Studio. Create a `.env` file in the root directory of the project and add your API key:
-    ```
-    GEMINI_API_KEY=YOUR_API_KEY_HERE
-    ```
+Or start a chat session:
+```bash
+uv run main.py --chat
+```
 
 ## Usage
 
-Run the agent from the command line with a user prompt.
-
 ```bash
-python main.py "Your prompt here"
+uv run main.py "list files in the root"
+uv run main.py --chat
+uv run main.py "read main.py" --verbose
+uv run main.py "..." --no-memory
+uv run main.py --reset-memory
+uv run main.py --memory-file /tmp/agent_memory.txt
 ```
 
-### Interaction Modes
+### Tools Available to the Agent
 
-*   **Direct Prompt Execution**:
-    ```bash
-    python main.py "Your prompt here"
-    ```
-*   **Interactive Chat**:
-    ```bash
-    python main.py --chat
-    ```
+- `get_files_info(directory)` — list files and sizes.
+- `get_file_content(file_path)` — read file contents (auto-truncated for safety).
+- `write_file(file_path, content)` — write/overwrite a file.
+- `run_python_file(file_path, args)` — execute a Python file with optional args.
+- `mkdir(directory_path)` — create a directory.
+- `rmdir(directory_path)` — remove a directory.
 
-### Output Control
+## How It Works
 
-*   **Verbose Output**: Use the `--verbose` flag for detailed insights into the agent's thought process.
-    ```bash
-    python main.py "Your prompt here" --verbose
-    ```
+The agent runs a loop:
+1) The model decides what tool(s) to call.
+2) The program executes those tools.
+3) Tool results are fed back into the conversation.
+4) The model returns a final response once it has enough info.
 
-### Memory Options
+Memory is summarized after each completed turn and injected into the system prompt on the next run so the agent can pick up where it left off.
 
-*   **No Memory**: Disable memory loading and saving for a single interaction.
-    ```bash
-    python main.py "Your prompt here" --no-memory
-    ```
-*   **Reset Memory**: Clear the current memory before starting a new interaction.
-    ```bash
-    python main.py "Your prompt here" --reset-memory
-    ```
-*   **Custom Memory File**: Specify a different file for memory storage.
-    ```bash
-    python main.py "Your prompt here" --memory-file /path/to/my_memory.txt
-    ```
+## Safety & Configuration
 
-### Examples:
+Tool calls are sandboxed to a working directory defined in `call_function.py` (`working_directory` is set to `.` by default). Change this if you want to restrict the agent to a subfolder (for example, `./calculator`).
 
-*   **List files in the current directory (verbose mode)**:
-    ```bash
-    python main.py "List the files in the current directory." --verbose
-    ```
+Be cautious when running the agent with write or execute permissions, as it can modify or run code on your machine.
 
-*   **Read the content of a file**:
-    ```bash
-    python main.py "What is in main.py?"
-    ```
+---
 
-*   **Perform a calculation (if a calculator tool is available)**:
-    ```bash
-    python main.py "What is 5 + 3 * 2?"
-    ```
-
-## Project Structure
-
-*   `main.py`: The main entry point for the AI agent, handling argument parsing, API interaction, and conversation flow.
-*   `call_function.py`: Contains the logic for defining and calling available tools (functions) that the AI agent can use.
-*   `prompts.py`: Stores the system prompt that guides the AI's behavior and persona.
-*   `.env`: (Not committed) Stores your `GEMINI_API_KEY`.
-*   `README.md`: This file.
+Built while following the Boot.dev course, then extended with a polished UI and memory features.
