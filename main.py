@@ -26,51 +26,68 @@ def main():
     
 
 def generate_content(client, prompt, messages, verbose):
-    response = client.models.generate_content(
-        model='gemini-2.5-flash',
-        contents=messages,
-        config=types.GenerateContentConfig(
-            system_instruction=system_prompt,
-            tools=[available_functions],
-        ),
-    )
-
-    usage = response.usage_metadata
-    if usage is None:
-        raise RuntimeError("No usage metadata returned from API response")
-
-    prompt_tokens = usage.prompt_token_count
-    response_tokens = getattr(usage, "response_token_count", None)
-    if response_tokens is None:
-        response_tokens = usage.candidates_token_count
-    if prompt_tokens is None or response_tokens is None:
-        raise RuntimeError("Usage metadata missing token counts")
-    
     if verbose:
         print(f"User prompt: {prompt}")
-        print(f"Prompt tokens: {prompt_tokens}")
-        print(f"Response tokens: {response_tokens}")
 
-    function_calls = response.function_calls
-    if function_calls:
-        function_results = []
-        for function_call_item in function_calls:
-            function_call_result = call_function(function_call_item, verbose=verbose)
-            if not function_call_result.parts:
-                raise RuntimeError("Function call result missing parts")
+    for _ in range(20):
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=messages,
+            config=types.GenerateContentConfig(
+                system_instruction=system_prompt,
+                tools=[available_functions],
+            ),
+        )
 
-            function_response = function_call_result.parts[0].function_response
-            if function_response is None:
-                raise RuntimeError("Function response missing")
+        usage = response.usage_metadata
+        if usage is None:
+            raise RuntimeError("No usage metadata returned from API response")
 
-            if function_response.response is None:
-                raise RuntimeError("Function response missing data")
+        prompt_tokens = usage.prompt_token_count
+        response_tokens = getattr(usage, "response_token_count", None)
+        if response_tokens is None:
+            response_tokens = usage.candidates_token_count
+        if prompt_tokens is None or response_tokens is None:
+            raise RuntimeError("Usage metadata missing token counts")
 
-            function_results.append(function_call_result.parts[0])
+        if verbose:
+            print(f"Prompt tokens: {prompt_tokens}")
+            print(f"Response tokens: {response_tokens}")
 
-            if verbose:
-                print(f"-> {function_response.response}")
-    else:
+        candidates = response.candidates or []
+        for candidate in candidates:
+            if candidate.content:
+                messages.append(candidate.content)
+
+        function_calls = response.function_calls
+        if function_calls:
+            function_results = []
+            for function_call_item in function_calls:
+                function_call_result = call_function(function_call_item, verbose=verbose)
+                if not function_call_result.parts:
+                    raise RuntimeError("Function call result missing parts")
+
+                function_response = function_call_result.parts[0].function_response
+                if function_response is None:
+                    raise RuntimeError("Function response missing")
+
+                if function_response.response is None:
+                    raise RuntimeError("Function response missing data")
+
+                function_results.append(function_call_result.parts[0])
+
+                if verbose:
+                    print(f"-> {function_response.response}")
+
+            if function_results:
+                messages.append(types.Content(role="user", parts=function_results))
+
+            continue
+
         print(response.text)
+        return
+
+    print("Error: maximum iterations reached without a final response")
+    raise SystemExit(1)
     
 main()
