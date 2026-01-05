@@ -177,6 +177,16 @@ def render_write_file(console, output):
     console.print(Panel(output.strip(), title="write_file", style=style))
 
 
+def render_mkdir(console, output):
+    style = "success" if output.startswith("Successfully") else "error"
+    console.print(Panel(output.strip(), title="mkdir", style=style))
+
+
+def render_rmdir(console, output):
+    style = "success" if output.startswith("Successfully") else "error"
+    console.print(Panel(output.strip(), title="rmdir", style=style))
+
+
 def render_tool_result(console, function_name, args, response, verbose):
     if response is None:
         console.print(Panel("No response from tool.", title=function_name, style="error"))
@@ -195,6 +205,10 @@ def render_tool_result(console, function_name, args, response, verbose):
         render_run_python_file(console, result)
     elif function_name == "write_file":
         render_write_file(console, result)
+    elif function_name == "mkdir":
+        render_mkdir(console, result)
+    elif function_name == "rmdir":
+        render_rmdir(console, result)
     else:
         console.print(Panel(str(result).strip(), title=function_name))
 

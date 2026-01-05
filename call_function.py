@@ -5,6 +5,7 @@ from functions.get_files_info import get_files_info, schema_get_files_info
 from functions.run_python_file import run_python_file, schema_run_python_file
 from functions.write_file import write_file, schema_write_file
 from functions.mkdir import mkdir, schema_mkdir
+from functions.rmdir import rmdir, schema_rmdir
 
 available_functions = types.Tool(
     function_declarations=[
@@ -13,6 +14,7 @@ available_functions = types.Tool(
         schema_run_python_file,
         schema_write_file,
         schema_mkdir,
+        schema_rmdir,
     ],
 )
 
@@ -25,6 +27,7 @@ def call_function(function_call, verbose=False):
         "run_python_file": run_python_file,
         "write_file": write_file,
         "mkdir": mkdir,
+        "rmdir": rmdir,
     }
 
     if function_name not in function_map:

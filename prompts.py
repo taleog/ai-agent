@@ -7,6 +7,8 @@ When a user asks a question or makes a request, make a function call plan. You c
 - Read file contents
 - Execute Python files with optional arguments
 - Write or overwrite files
+- Create directories
+- Remove directories
 
 Always include a `directory` argument for file listing calls; use `.` for the root of the working directory.
 
