@@ -1,13 +1,23 @@
 import os
 import argparse
+import re
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 from call_function import available_functions, call_function
 from prompts import system_prompt
+from rich import box
+from rich.console import Console
+from rich.markdown import Markdown
+from rich.panel import Panel
+from rich.pretty import Pretty
+from rich.syntax import Syntax
+from rich.table import Table
+from rich.theme import Theme
 
 DEFAULT_MEMORY_FILE = ".agent_memory.txt"
 MAX_MEMORY_CHARS = 2000
+MAX_DISPLAY_CHARS = 4000
 SUMMARY_PROMPT = """
 You are updating a running memory for a coding agent.
 Summarize only the durable, useful context: user goals, preferences, important files, and notable actions.
@@ -15,6 +25,17 @@ Keep it concise (under 200 words) and avoid large code blocks or tool output dum
 If there is nothing important to add, return the previous memory unchanged.
 """
 
+THEME = Theme(
+    {
+        "user": "bold cyan",
+        "agent": "bold green",
+        "tool": "yellow",
+        "muted": "dim",
+        "error": "bold red",
+        "success": "green",
+    }
+)
+CONSOLE = Console(theme=THEME)
 
 def load_memory(path):
     try:
@@ -69,6 +90,125 @@ def update_memory(client, previous_memory, prompt, final_text, tool_calls, verbo
     return new_memory
 
 
+def parse_files_info(output):
+    lines = [line.strip() for line in output.splitlines() if line.strip()]
+    if not lines:
+        return None, []
+
+    title = lines[0]
+    rows = []
+    for line in lines[1:]:
+        if line.startswith("- "):
+            line = line[2:]
+        match = re.match(
+            r"(.+): file_size=(\d+) bytes, is_dir=(True|False)$", line
+        )
+        if not match:
+            continue
+        name, size, is_dir = match.groups()
+        rows.append((name, int(size), is_dir == "True"))
+    return title, rows
+
+
+def guess_lexer(file_path):
+    ext = os.path.splitext(file_path)[1].lower()
+    return {
+        ".py": "python",
+        ".md": "markdown",
+        ".toml": "toml",
+        ".json": "json",
+        ".txt": "text",
+    }.get(ext, "text")
+
+
+def render_tool_call(console, function_name, args, verbose):
+    if verbose:
+        console.print(
+            Panel(Pretty(args or {}), title=f"Tool call: {function_name}", style="tool")
+        )
+    else:
+        console.print(f"[muted]- Tool:[/muted] [tool]{function_name}[/tool]")
+
+
+def render_files_info(console, output):
+    if "Error:" in output:
+        console.print(Panel(output.strip(), title="get_files_info", style="error"))
+        return
+
+    title, rows = parse_files_info(output)
+    if not rows:
+        console.print(Panel(output.strip(), title="get_files_info"))
+        return
+
+    table = Table(title=title or "Files", box=box.ROUNDED)
+    table.add_column("Name", overflow="fold")
+    table.add_column("Size", justify="right")
+    table.add_column("Type")
+    for name, size, is_dir in rows:
+        table.add_row(name, f"{size} B", "dir" if is_dir else "file")
+    console.print(table)
+
+
+def render_file_content(console, args, output):
+    file_path = (args or {}).get("file_path", "file")
+    if output.startswith("Error:"):
+        console.print(Panel(output.strip(), title=file_path, style="error"))
+        return
+
+    display = output
+    if len(display) > MAX_DISPLAY_CHARS:
+        display = display[:MAX_DISPLAY_CHARS].rstrip() + "\n...[display truncated]"
+
+    lexer = guess_lexer(file_path)
+    syntax = Syntax(display, lexer, theme="monokai", word_wrap=True)
+    console.print(Panel(syntax, title=file_path))
+
+
+def render_run_python_file(console, output):
+    if output.startswith("Error:"):
+        console.print(Panel(output.strip(), title="run_python_file", style="error"))
+        return
+
+    console.print(Panel(output.strip(), title="run_python_file"))
+
+
+def render_write_file(console, output):
+    style = "success" if output.startswith("Successfully") else "error"
+    console.print(Panel(output.strip(), title="write_file", style=style))
+
+
+def render_tool_result(console, function_name, args, response, verbose):
+    if response is None:
+        console.print(Panel("No response from tool.", title=function_name, style="error"))
+        return
+
+    if "error" in response:
+        console.print(Panel(str(response["error"]), title=function_name, style="error"))
+        return
+
+    result = response.get("result", "")
+    if function_name == "get_files_info":
+        render_files_info(console, result)
+    elif function_name == "get_file_content":
+        render_file_content(console, args, result)
+    elif function_name == "run_python_file":
+        render_run_python_file(console, result)
+    elif function_name == "write_file":
+        render_write_file(console, result)
+    else:
+        console.print(Panel(str(result).strip(), title=function_name))
+
+    if verbose:
+        console.print(Panel(Pretty(response), title="Tool response", style="muted"))
+
+
+def render_agent_response(console, text):
+    if not text:
+        console.print(Panel("No response.", title="Agent", style="error"))
+        return
+    console.print(Panel(Markdown(text), title="Agent", border_style="agent"))
+
+
 def main():
     
     parser = argparse.ArgumentParser(description="Chatbot")
@@ -101,8 +241,9 @@ def main():
         messages = [types.Content(role="user", parts=[types.Part(text=user_prompt)])]
         system_instruction = build_system_instruction(memory_snapshot)
         final_text, tool_calls = generate_content(
-            client, user_prompt, messages, args.verbose, system_instruction
+            client, user_prompt, messages, args.verbose, system_instruction, CONSOLE
         )
+        render_agent_response(CONSOLE, final_text)
         if not args.no_memory:
             updated_memory = update_memory(
                 client, memory_snapshot, user_prompt, final_text, tool_calls, args.verbose
@@ -112,9 +253,16 @@ def main():
         return memory_snapshot
 
     if args.chat:
+        CONSOLE.print(
+            Panel(
+                "Ask questions about the repo or request actions. Type 'exit' to quit.",
+                title="AI Agent",
+                border_style="agent",
+            )
+        )
         while True:
             try:
-                user_prompt = input("You> ").strip()
+                user_prompt = CONSOLE.input("[user]You>[/user] ").strip()
             except EOFError:
                 break
 
@@ -122,24 +270,26 @@ def main():
                 break
 
             memory_text = run_turn(user_prompt, memory_text)
+            CONSOLE.print()
     else:
         memory_text = run_turn(args.user_prompt, memory_text)
     
 
-def generate_content(client, prompt, messages, verbose, system_instruction):
+def generate_content(client, prompt, messages, verbose, system_instruction, console):
     if verbose:
-        print(f"User prompt: {prompt}")
+        console.print(f"[muted]User prompt:[/muted] {prompt}")
 
     tool_calls_log = []
     for _ in range(20):
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=messages,
-            config=types.GenerateContentConfig(
-                system_instruction=system_instruction,
-                tools=[available_functions],
-            ),
-        )
+        with console.status("[muted]Thinking...[/muted]", spinner="dots"):
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=messages,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_instruction,
+                    tools=[available_functions],
+                ),
+            )
 
         usage = response.usage_metadata
         if usage is None:
@@ -153,8 +303,8 @@ def generate_content(client, prompt, messages, verbose, system_instruction):
             raise RuntimeError("Usage metadata missing token counts")
 
         if verbose:
-            print(f"Prompt tokens: {prompt_tokens}")
-            print(f"Response tokens: {response_tokens}")
+            console.print(f"[muted]Prompt tokens:[/muted] {prompt_tokens}")
+            console.print(f"[muted]Response tokens:[/muted] {response_tokens}")
 
         candidates = response.candidates or []
         for candidate in candidates:
@@ -168,6 +318,9 @@ def generate_content(client, prompt, messages, verbose, system_instruction):
                 tool_calls_log.append(
                     f"{function_call_item.name}({function_call_item.args})"
                 )
+                render_tool_call(
+                    console, function_call_item.name or "", function_call_item.args, verbose
+                )
                 function_call_result = call_function(function_call_item, verbose=verbose)
                 if not function_call_result.parts:
                     raise RuntimeError("Function call result missing parts")
@@ -180,19 +333,28 @@ def generate_content(client, prompt, messages, verbose, system_instruction):
                     raise RuntimeError("Function response missing data")
 
                 function_results.append(function_call_result.parts[0])
-
-                if verbose:
-                    print(f"-> {function_response.response}")
+                render_tool_result(
+                    console,
+                    function_call_item.name or "",
+                    function_call_item.args,
+                    function_response.response,
+                    verbose,
+                )
 
             if function_results:
                 messages.append(types.Content(role="user", parts=function_results))
 
             continue
 
-        print(response.text)
         return response.text, tool_calls_log
 
-    print("Error: maximum iterations reached without a final response")
+    console.print(
+        Panel(
+            "Error: maximum iterations reached without a final response.",
+            title="Agent",
+            style="error",
+        )
+    )
     raise SystemExit(1)
     
 main()

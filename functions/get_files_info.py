@@ -34,7 +34,6 @@ def get_files_info(working_directory, directory="."):
 
     lines.append("")
     output = "\n".join(lines)
-    print(output)
     return output
 
 schema_get_files_info = types.FunctionDeclaration(
