@@ -5,7 +5,15 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 from call_function import available_functions, call_function
-from prompts import system_prompt
+from config import (
+    DEFAULT_MEMORY_FILE,
+    GEMINI_MODEL_NAME,
+    MAX_DISPLAY_CHARS,
+    MAX_MEMORY_CHARS,
+    MAX_TABLE_ROWS,
+    MAX_TOOL_CALLS_PER_TURN,
+)
+from prompts import summary_prompt, system_prompt
 from rich import box
 from rich.console import Console
 from rich.markdown import Markdown
@@ -14,17 +22,6 @@ from rich.pretty import Pretty
 from rich.syntax import Syntax
 from rich.table import Table
 from rich.theme import Theme
-
-DEFAULT_MEMORY_FILE = ".agent_memory.txt"
-MAX_MEMORY_CHARS = 2000
-MAX_DISPLAY_CHARS = 4000
-MAX_TABLE_ROWS = 12
-SUMMARY_PROMPT = """
-You are updating a running memory for a coding agent.
-Summarize only the durable, useful context: user goals, preferences, important files, and notable actions.
-Keep it concise (under 200 words) and avoid large code blocks or tool output dumps.
-If there is nothing important to add, return the previous memory unchanged.
-"""
 
 THEME = Theme(
     {
@@ -73,9 +70,9 @@ def update_memory(client, previous_memory, prompt, final_text, tool_calls, verbo
     )
 
     response = client.models.generate_content(
-        model="gemini-2.5-flash",
+        model=GEMINI_MODEL_NAME,
         contents=summary_input,
-        config=types.GenerateContentConfig(system_instruction=SUMMARY_PROMPT),
+        config=types.GenerateContentConfig(system_instruction=summary_prompt),
     )
 
     new_memory = (response.text or "").strip()
@@ -285,7 +282,10 @@ def main():
         )
         while True:
             try:
-                user_prompt = CONSOLE.input("[user]You>[/user] ").strip()
+                if os.getenv("AI_AGENT_PLAIN_PROMPT") == "1":
+                    user_prompt = CONSOLE.input("You> ", markup=False).strip()
+                else:
+                    user_prompt = CONSOLE.input("[user]You>[/user] ").strip()
             except EOFError:
                 break
 
@@ -303,10 +303,10 @@ def generate_content(client, prompt, messages, verbose, system_instruction, cons
         console.print(f"[muted]User prompt:[/muted] {prompt}")
 
     tool_calls_log = []
-    for _ in range(20):
-        with console.status("[muted]Thinking...[/muted]", spinner="dots"):
+    for _ in range(MAX_TOOL_CALLS_PER_TURN):
+        with console.status("[muted]Calling Gemini...[/muted]", spinner="dots"):
             response = client.models.generate_content(
-                model='gemini-2.5-flash',
+                model=GEMINI_MODEL_NAME,
                 contents=messages,
                 config=types.GenerateContentConfig(
                     system_instruction=system_instruction,
@@ -335,49 +335,48 @@ def generate_content(client, prompt, messages, verbose, system_instruction, cons
                 messages.append(candidate.content)
 
         function_calls = response.function_calls
-        if function_calls:
-            function_results = []
-            for function_call_item in function_calls:
-                tool_calls_log.append(
-                    f"{function_call_item.name}({function_call_item.args})"
-                )
-                render_tool_call(
-                    console, function_call_item.name or "", function_call_item.args, verbose
-                )
-                function_call_result = call_function(function_call_item, verbose=verbose)
-                if not function_call_result.parts:
-                    raise RuntimeError("Function call result missing parts")
+        if not function_calls:
+            return response.text, tool_calls_log
 
-                function_response = function_call_result.parts[0].function_response
-                if function_response is None:
-                    raise RuntimeError("Function response missing")
+        function_results = []
+        for function_call_item in function_calls:
+            function_name = function_call_item.name or ""
+            call_args = dict(function_call_item.args or {})
+            tool_calls_log.append(f"{function_name}({call_args})")
 
-                if function_response.response is None:
-                    raise RuntimeError("Function response missing data")
+            render_tool_call(console, function_name, call_args, verbose)
+            function_call_result = call_function(function_call_item, verbose=verbose)
+            if not function_call_result.parts:
+                raise RuntimeError("Function call result missing parts")
 
-                function_results.append(function_call_result.parts[0])
-                render_tool_result(
-                    console,
-                    function_call_item.name or "",
-                    function_call_item.args,
-                    function_response.response,
-                    verbose,
-                )
+            function_response = function_call_result.parts[0].function_response
+            if function_response is None:
+                raise RuntimeError("Function response missing")
 
-            if function_results:
-                messages.append(types.Content(role="user", parts=function_results))
+            if function_response.response is None:
+                raise RuntimeError("Function response missing data")
 
-            continue
+            function_results.append(function_call_result.parts[0])
+            render_tool_result(
+                console,
+                function_name,
+                call_args,
+                function_response.response,
+                verbose,
+            )
 
-        return response.text, tool_calls_log
+        if function_results:
+            messages.append(types.Content(role="user", parts=function_results))
 
     console.print(
         Panel(
-            "Error: maximum iterations reached without a final response.",
-            title="Agent",
+            "Maximum tool calls reached. The agent stopped without a final answer.",
+            title="Warning",
             style="error",
         )
     )
-    raise SystemExit(1)
-    
-main()
+    return "", tool_calls_log
+
+
+if __name__ == "__main__":
+    main()

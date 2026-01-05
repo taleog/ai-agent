@@ -13,3 +13,5 @@ wheels/
 .env
 uv.lock
 .agent_memory.txt
+AGENTS.md
+calculator/lorem.txt
