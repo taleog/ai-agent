@@ -81,7 +81,3 @@ brew install vhs
 ```
 
 Edit `docs/demo.tape` to change the flow, theme, or prompts.
-
----
-
-Built while following the Boot.dev course, then extended with a polished UI and memory features.
